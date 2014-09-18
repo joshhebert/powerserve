@@ -9,11 +9,5 @@ all: server_core.c
 debug:
 	$(CC) -std=$(CSTANDARD) $(CFLAGS) -g server_core.c -o ./bin/server_debug
 
-run: all
-	./server
-
-run-debug: debug
-	valgrind --tool=memcheck --leak-check=yes --track-fds=yes --track-origins=yes ./bin/server_debug
-
 clean: 
-	
+	rm -r bin/*	

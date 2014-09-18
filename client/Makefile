@@ -9,11 +9,5 @@ all: client_core.c
 debug:
 	$(CC) -std=$(CSTANDARD) $(CFLAGS) -g client_core.c -o ./bin/client_debug
 
-run: all
-	./client
-
-run-debug: debug
-	valgrind --tool=memcheck --leak-check=yes --track-origins=yes ./bin/client_debug
-
 clean: 
-	
+	rm -r bin/*	

@@ -3,56 +3,32 @@
  *
  *       Filename:  server_core.c
  *
- *    Description:  
+ *    Description:  Simple, multithreaded HTTP server 
  *
  *        Version:  1.0
- *        Created:  09/12/2014 01:37:05 PM
+ *        Created:  09/07/2014 01:37:05 PM
  *       Revision:  none
  *       Compiler:  gcc
- *
- *         Author:  Josh Hebert (jahebert@wpi.edu), 
+ *     C Standard:  gnu99
+ 
+ *         Author:  Josh Hebert (jahebert@wpi.edu)
  *   Organization:  WPI
  *
  * =====================================================================================
  */
 
-// Libraries and stuff
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <sys/mman.h>
-#include <fcntl.h>
-#include <netdb.h>
-#include <signal.h>
-#include <pthread.h>
+#include "server_core.h"
 
-#define MAX_CLIENTS 10
-// Prepare for threading
-pthread_t threads [ MAX_CLIENTS ];
-// the socket our server listens with
-int *listen_file_desc;
-int abrt = 0;
-typedef struct {
-	char* command;
-	char* resource;
-	char* version;
-} HTTPRequest;
-
-/* What to do on SIGINT
- *
+/* 
+ * What to do on SIGINT
  */
-
 void SIGINT_handler( ){
-	printf( "Caught SIGINT!\n" );
 	abrt = 1;
 	shutdown( *listen_file_desc, 2 );
 }
 
-/* Bind up signals
+/* 
+ * Bind up signals
  */
 int bind_signals( ){
 	signal( SIGINT, SIGINT_handler );
@@ -72,6 +48,9 @@ int count_thread_sockets( ){
 	return accum;
 }
 
+/*
+ * Get a socket to listen with, using the requested port
+ */
 int get_socket( int *listen_file_desc, int port ){
 	// Safety first
 		if( listen_file_desc == NULL ){
@@ -101,7 +80,7 @@ int get_socket( int *listen_file_desc, int port ){
 		bind_status = bind( *listen_file_desc, ( struct sockaddr * ) &address, sizeof( address ) );
 		if( bind_status != 0 || bind_status == -1 ){
 			// Bind failed
-			printf( "\n[MAIN THREAD] Bind failed!\n" );
+			printf( "\n[MAIN THREAD] Bind failed! Is something else running on that port?\n" );
 			return -1;	
 		}
 
@@ -116,14 +95,19 @@ int get_socket( int *listen_file_desc, int port ){
 
 }
 
-
-
+/*
+ * Parses incoming HTTP requests to figure out what the client wants
+ */
 int http_receive_request( int client_file_desc, char **request ){
+	// Set up some buffers
 	char *receive_buff = NULL;
 	char *sock_buff = malloc( BUFSIZ );
 	memset( sock_buff, ( int ) '\0', BUFSIZ );
 	int total_bytes_received = 0;
+	
+	// Receive until we have everything
 	for( ;; ){
+		// Read _one_at_a_time_, because we don't want to overshoot
 		int bytes_received = recv( client_file_desc, sock_buff, BUFSIZ, 0 );
 		total_bytes_received += bytes_received;
 		if( !( bytes_received > 0 ) ){
@@ -141,9 +125,10 @@ int http_receive_request( int client_file_desc, char **request ){
 
 			receive_buff = tmp;
 		}else{
-			// Throw an error?
+			return -1;
 		}
 
+		// Check for the end of the HTTP header
 		if( strstr( receive_buff, "\r\n\r\n" ) != NULL ){
 			// We're done here
 			break;
@@ -160,15 +145,25 @@ int http_receive_request( int client_file_desc, char **request ){
 	return total_bytes_received;
 }
 
+/*
+ * Send the client what they were looking for, if possible
+ */
 int http_respond( int client_file_desc, char *requested_resource ){
- 
-	char *OK200 = "HTTP/1.1 200 OK\n";
+	// HTTP codes we can use
+		char *OK200 = "HTTP/1.1 200 OK\n";
+		// 404 and default body
+		char *ERR404 = "HTTP/1.1 404 Not Found\n";
+		char *ERR404_body = "<html>\n<head>\n<title>404 - Not Found</title>\n</head>\n<body>\n<h1>404 - Not Found</h1>\n</body>\n</html>\n";
+
 	char *connection = "Connection: close\n";
 	char *content_type = "Content-Type: text/html\n";
 
 	// 25 Bytes hould be enough *fingers crossed*
 	char *content_length = malloc( 25 );
 	char *resource;
+	
+	// Use 200 OK unless we can't find the requested resource
+	char *response_header = OK200;
 
 	// UGH. They didn't specify a resource. Jerks.
 	if( requested_resource == NULL ){
@@ -190,51 +185,56 @@ int http_respond( int client_file_desc, char *requested_resource ){
 	// Get a file descriptor. because those are SO much more useful
 	int resource_file_desc = open( resource + 1, O_RDONLY );
 
-	// We don't need the actual name of the resource now that we've found it
+	// We don't need the actual name of the resource now that we've found its descriptor
 	free( resource );
 
+	char *read_buffer;
+	int file_size;
 
+	// Check if we need to 404 the client
 	if( resource_file_desc < 0 ){
 		//Send 404
-		printf("Server Responds: 404\n");
-		free( content_length );
-		return -1;
+		response_header = ERR404;
+		read_buffer = ERR404_body;
+		file_size = strlen( ERR404_body );
+	}else{
+		// Figure out how big this is
+		struct stat st;
+		fstat( resource_file_desc, &st );
+		file_size = st.st_size;
+		
+		// Read the file to a buffer
+		read_buffer = mmap( 0, file_size, PROT_READ, MAP_PRIVATE, resource_file_desc, 0 );
 	}
 
-	// Figure out how big this is
-	struct stat st;
-	fstat( resource_file_desc, &st );
-	int file_size = st.st_size;
-
-	//Put that in our HTTP response
+	//Put the size of file_size in our header (could be the length of the 404 message)
 	snprintf( content_length, 25, "Content-Length: %d", file_size );
 	
-	// Read the file to a buffer
-	char *read_buffer;
-	read_buffer = mmap( 0, file_size, PROT_READ, MAP_PRIVATE, resource_file_desc, 0 );
 	if( read_buffer != ( void * ) - 1 ){
 		// Send everything on its way
-		send( client_file_desc, OK200, strlen( OK200 ), 0 ); 
+		send( client_file_desc, response_header, strlen( response_header ), 0 ); 
 		send( client_file_desc, connection, strlen( connection ), 0 ); 
 		send( client_file_desc, content_type, strlen( content_type ), 0 ); 
 		send( client_file_desc, content_length, strlen( content_length ), 0 ); 
 		send( client_file_desc, "\r\n\r\n", 4, 0 ); 
-
-		// This should return a value equal to file_size
 		send( client_file_desc, read_buffer, file_size, 0 ); 
 		
 
-		
-		munmap( read_buffer, file_size );
+		// Free the mapped file (if we didn't 404)
+		if( !( resource_file_desc < 0 ) ) {
+			munmap( read_buffer, file_size );
+		}
 	}
 	//free( read_buffer );
 	free( content_length );
 	close( resource_file_desc );
 		
-	
 	return 0;
 }
 
+/*
+ * Remove the specified thread from the array of threads
+ */
 int close_thread( pthread_t tid ){
 	if( tid != 0 ){
 		for ( int i = 0; i < MAX_CLIENTS; ++i ){
@@ -304,6 +304,9 @@ void *handle_client( void *args ){
 	pthread_exit( NULL );
 }
 
+/*
+ * What's the next open thread slot?
+ */
 int get_next_available_thread( ){
 	for( int i = 0; i < MAX_CLIENTS; ++i ){
 		if( threads[ i ] == 0 ){
@@ -313,6 +316,9 @@ int get_next_available_thread( ){
 	return -1;
 }
 
+/*
+ * Main
+ */
 int main( int argc, char *argv[ ] ){
 	int port;
 	if( argc == 2 ){
@@ -336,9 +342,10 @@ int main( int argc, char *argv[ ] ){
 		memset( clientaddr, 0, sizeof( struct sockaddr_in ) );
 		memset( addrlen, 0, sizeof( socklen_t ) );
 		
+		// Loop forever until SIGINT
 		for( ;; ){
 			if( abrt == 1 ){
-					printf( "[MAIN THREAD] Caught SIGABRT, not accepting any more connections\n" );
+					printf( "[MAIN THREAD] Caught SIGINT, not accepting any more connections\n" );
 					printf( "[MAIN THREAD] Please wait for existing connections to close\n" );
 					break;
 			}else{
@@ -357,6 +364,8 @@ int main( int argc, char *argv[ ] ){
 			}
 
 		}
+
+		// Shut down
 		close( *listen_file_desc );
 		printf("[MAIN THREAD] Waiting for child threads to terminate...");
 		for( int i = 0; i < MAX_CLIENTS; ++i ){

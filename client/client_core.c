@@ -3,7 +3,7 @@
  *
  *       Filename:  client_core.c
  *
- *    Description:  Handles initialization of the http client
+ *    Description:  Simple HTTP client that supports chunked encoding
  *
  *        Version:  1.0
  *        Created:  09/05/2014 08:24:22 AM

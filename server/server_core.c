@@ -161,32 +161,40 @@ int http_respond( int client_file_desc, char *requested_resource ){
 	// 25 Bytes hould be enough *fingers crossed*
 	char *content_length = malloc( 25 );
 	char *resource;
-	
+	int resource_file_desc; 	
 	// Use 200 OK unless we can't find the requested resource
 	char *response_header = OK200;
 
-	// UGH. They didn't specify a resource. Jerks.
-	if( requested_resource == NULL ){
-		resource = "/index.html";
+	// None of that now
+	if( strstr( requested_resource, ".." ) != NULL ){
+		// Oh, you wanted directory traversal? Have index.html instead
+		resource = "/imdex.html";
+		// Get a file descriptor. because those are SO much more useful
+		resource_file_desc = open( resource + 1, O_RDONLY );
 	}else{
-		resource = malloc( strlen(requested_resource ) + 1 );
-		strcpy( resource, requested_resource );
-		
-		// No, you cannot have a directory
-	 	if( requested_resource[ strlen( requested_resource ) - 1 ] == '/' ){
-			
-			// Here, have the index.html that's (probably) in there
-			resource = realloc( resource, strlen( requested_resource ) + 12 );
+		// UGH. They didn't specify a resource. Jerks.
+		if( requested_resource == NULL ){
+			resource = "/index.html";
+		}else{
+			resource = malloc( strlen(requested_resource ) + 1 );
 			strcpy( resource, requested_resource );
-			strcat( resource, "index.html" );
-		}	
+			
+			// No, you cannot have a directory
+			if( requested_resource[ strlen( requested_resource ) - 1 ] == '/' ){
+				
+				// Here, have the index.html that's (probably) in there
+				resource = realloc( resource, strlen( requested_resource ) + 12 );
+				strcpy( resource, requested_resource );
+				strcat( resource, "index.html" );
+			}	
+		}
+		// Get a file descriptor. because those are SO much more useful
+		resource_file_desc = open( resource + 1, O_RDONLY );
+		// We don't need the actual name of the resource now that we've found its descriptor
+		free( resource );
 	}
 
-	// Get a file descriptor. because those are SO much more useful
-	int resource_file_desc = open( resource + 1, O_RDONLY );
 
-	// We don't need the actual name of the resource now that we've found its descriptor
-	free( resource );
 
 	char *read_buffer;
 	int file_size;

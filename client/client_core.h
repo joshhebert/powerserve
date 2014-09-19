@@ -8,6 +8,7 @@
 	#include <sys/socket.h>
 	#include <netdb.h>
 	#include <unistd.h>
+	#include <time.h>
 
 	int get_socket( int *socket_file_desc, char *host, char *port );
 	int http_get( int socket_file_desc, char *host, char *file );

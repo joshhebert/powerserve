@@ -62,7 +62,7 @@ int get_socket( int *listen_file_desc, int port ){
 			hints->ai_family = AF_INET;
 			hints->ai_socktype = SOCK_STREAM;
 	
-	// Socket that shit up
+	// Socket it up
 		*listen_file_desc = socket( hints->ai_family, hints->ai_socktype, 0 );
 		free( hints );
 		if( *listen_file_desc == -1 ){
@@ -233,7 +233,6 @@ int http_respond( int client_file_desc, char *requested_resource ){
 			munmap( read_buffer, file_size );
 		}
 	}
-	//free( read_buffer );
 	free( content_length );
 	close( resource_file_desc );
 		
@@ -293,7 +292,7 @@ void *handle_client( void *args ){
 	if( strcmp( request->command, "GET") == 0 ){
 		http_respond( client_file_desc, request->resource );
 	}else{
-		// Unknown command, throw an error to the client
+		// Nothing more for me to do here
 	}
 
 	// Clean up memory and terminate the thread

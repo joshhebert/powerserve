@@ -228,6 +228,9 @@ int http_receive( int socket_file_desc, char **receive_buffer ){
 }
 
 
+/* 
+ * Gets the next chunk in a received HTTP sequence using chunked encoding 
+ */
 int get_next_chunk( int socket_file_desc, char **receive_buffer ){
 	// Deal with chunked encoding 
 
@@ -293,6 +296,10 @@ int get_next_chunk( int socket_file_desc, char **receive_buffer ){
 	return 0;
 }
 
+
+/*
+ * Figure out what the user actually wants
+ */
 int parse_url( char* url, char **host, char **resource){
 	*host = strtok( url, "/");
 	*resource = malloc( strlen( url ) + 2 );
@@ -337,7 +344,16 @@ int main( int argc, char *argv[ ] ){
 		printf( "Error getting socket\n" );
 		return 1;
 	}
-	
+
+	struct timespec *time_start;
+	struct timespec *time_stop; 
+	if( calc_rtt == 1 ){
+		time_stop = malloc( sizeof ( struct timespec ) );
+		time_start = malloc( sizeof ( struct timespec ) );
+		// When did we start RTT?
+		clock_gettime( CLOCK_MONOTONIC, time_start );
+	}
+
 	// Send a GET request for the specified resource on the target server
 	if( http_get( socket_file_desc, host, target ) ){
 		printf( "Error sending GET request\n" );
@@ -351,9 +367,23 @@ int main( int argc, char *argv[ ] ){
 		return 1;
 	}
 
+	long long elapsed_time;
+	if( calc_rtt == 1 ){
+		// When are we done?
+		clock_gettime( CLOCK_MONOTONIC, time_stop );
+		long long start_time = ( time_start->tv_sec * 1000000000 ) + time_start->tv_nsec;
+		long long  stop_time = ( time_stop->tv_sec * 1000000000 ) + time_stop->tv_nsec;
+		elapsed_time = stop_time - start_time;
+	}
 	// Print the HTML stuff we received
 	printf( "Begin HTML Content:\n\n%s\n", recv_buffer );
-	
+
+	if( calc_rtt == 1 ){
+		printf( "RTT: %f seconds\n", elapsed_time / 1000000000.0 );
+		free( time_start );
+		free( time_stop );
+	}
+
 	// Clean up our buffers
 	free( recv_buffer );
 	free( target );

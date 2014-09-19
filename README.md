@@ -1,4 +1,4 @@
-Assignment 1 (CS3516)
+Powerserve
 ==========
 
 ###Josh Hebert (jahebert@wpi.edu)

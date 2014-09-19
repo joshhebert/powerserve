@@ -1,8 +1,6 @@
 Powerserve
 ==========
 
-###Josh Hebert (jahebert@wpi.edu)
-
 Extremely fast and lightweight HTTP server and client, used to prototype a website without the effort of setting up a full Apache installation.
 
 ##Features of the client:
